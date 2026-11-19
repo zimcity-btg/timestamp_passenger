@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ตอกบัตร_นับผู้โดยสาร</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    :root {
+      --green: #06C755; --green-dark: #05a847; --red: #e5484d; --amber: #d98b00; --blue: #2563eb;
+      --bg: #f3f5f7; --card: #fff; --text: #16191d; --muted: #6b7280; --line: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Noto Sans Thai', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; }
+    main { max-width: 480px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); }
+    .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .hidden { display: none !important; }
+
+    .profile { display: flex; align-items: center; gap: 12px; }
+    .profile img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; background: var(--line); }
+    .profile .name { font-weight: 600; font-size: 17px; }
+    .clock { margin-left: auto; text-align: right; }
+    .clock .t { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .status { display: flex; align-items: center; gap: 10px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+    .dot.on { background: var(--green); box-shadow: 0 0 0 4px rgba(6,199,85,.18); }
+
+    #map { height: 200px; border-radius: 12px; margin: 12px 0 10px; z-index: 0; }
+    .geo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+    .badge.ok { background: #e6f9ee; color: var(--green-dark); }
+    .badge.bad { background: #fdecec; color: var(--red); }
+    .badge.wait { background: #fff4e0; color: var(--amber); }
+    .link { background: none; border: 0; color: var(--green-dark); font: inherit; font-size: 13px; padding: 4px 0; cursor: pointer; }
+
+    label.f { display: block; font-weight: 600; margin: 10px 0 6px; }
+    label.f:first-of-type { margin-top: 0; }
+    .inp { width: 100%; font: inherit; font-size: 20px; padding: 12px 14px; border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--text); }
+    .inp:focus { outline: none; border-color: var(--green); }
+    textarea.inp { font-size: 16px; min-height: 76px; resize: vertical; }
+    .unit { display: flex; align-items: center; gap: 8px; }
+    .unit span { color: var(--muted); }
+    .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .seg button { font: inherit; padding: 12px 6px; border-radius: 12px; border: 2px solid var(--line); background: #fff; cursor: pointer; font-weight: 600; color: var(--text); }
+    .seg button.on { border-color: var(--green); background: #e6f9ee; color: var(--green-dark); }
+    .slip { display: flex; gap: 10px; align-items: center; }
+    .slip img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; background: var(--line); }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .btn { border: 0; border-radius: 14px; padding: 18px 8px; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; color: #fff; }
+    .btn small { display: block; font-weight: 400; font-size: 12px; opacity: .9; }
+    .btn.in { background: var(--green); }
+    .btn.out { background: #1f2937; }
+    .btn.req { background: var(--blue); width: 100%; }
+    .btn:disabled { background: #cfd4da; color: #fff; cursor: not-allowed; }
+    .btn.primary { outline: 3px solid rgba(6,199,85,.35); outline-offset: 2px; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #e5e7eb; padding: 4px; border-radius: 12px; margin-bottom: 12px; }
+    .tabs button { font: inherit; font-weight: 600; border: 0; border-radius: 9px; padding: 9px; background: transparent; color: var(--muted); cursor: pointer; }
+    .tabs button.on { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+    .timeline { list-style: none; margin: 8px 0 0; padding: 0; }
+    .timeline li { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .timeline li:first-child { border-top: 0; }
+    .timeline .tm { font-weight: 600; font-variant-numeric: tabular-nums; width: 52px; flex: none; }
+    .pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; margin-left: auto; white-space: nowrap; align-self: center; }
+    .pill.w { background: #fff4e0; color: var(--amber); } .pill.o { background: #e6f9ee; color: var(--green-dark); } .pill.n { background: #fdecec; color: var(--red); }
+    .bal { display: flex; justify-content: space-between; align-items: baseline; }
+    .bal b { font-size: 22px; }
+
+    .notice { text-align: center; padding: 32px 16px; }
+    .notice h2 { margin: 8px 0; font-size: 19px; }
+    .spinner { width: 36px; height: 36px; border: 4px solid var(--line); border-top-color: var(--green); border-radius: 50%; margin: 0 auto; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+    .sheet { background: #fff; border-radius: 20px; padding: 24px 20px; width: 100%; max-width: 400px; text-align: center; }
+    .sheet .icon { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 8px; display: grid; place-items: center; font-size: 34px; color: #fff; }
+    .sheet .icon.ok { background: var(--green); } .sheet .icon.bad { background: var(--red); }
+    .sheet h2 { margin: 6px 0 4px; }
+    .sheet ul { text-align: left; padding-left: 20px; color: var(--red); }
+    .sheet .extra { margin-top: 6px; font-weight: 600; white-space: pre-line; }
+    .sheet .btn { width: 100%; margin-top: 12px; padding: 14px; font-size: 16px; }
+  </style>
+</head>
+<body>
+<main>
+  <section id="loading" class="card notice"><div class="spinner"></div><p class="muted">กำลังโหลด…</p></section>
+
+  <section id="blocked" class="card notice hidden">
+    <h2 id="blockedTitle"></h2>
+    <p id="blockedMsg" class="muted"></p>
+  </section>
+
+  <div id="app" class="hidden">
+    <section class="card profile">
+      <img id="avatar" alt="">
+      <div>
+        <div class="name" id="empName"></div>
+        <div class="muted" id="empCode"></div>
+      </div>
+      <div class="clock"><div class="t" id="clock">--:--</div><div class="muted" id="today"></div></div>
+    </section>
+
+    <nav class="tabs hidden" id="tabs">
+      <button id="tabReq">ใบเบิก</button>
+      <button id="tabCheck" class="on">เช็คอิน / เอาท์</button>
+    </nav>
+
+    <!-- ===== หน้าเช็คอิน/เช็คเอาท์ ===== -->
+    <div id="viewCheck">
+      <section class="card status">
+        <span class="dot" id="statusDot"></span>
+        <div><div id="statusText"></div><div class="muted" id="statusSub"></div></div>
+      </section>
+
+      <section class="card">
+        <div class="geo">
+          <strong>ตำแหน่งของคุณ</strong>
+          <span class="badge wait" id="geoBadge">กำลังหาตำแหน่ง…</span>
+        </div>
+        <div id="map"></div>
+        <div class="muted" id="geoDetail">กรุณาอนุญาตให้เข้าถึงตำแหน่ง</div>
+        <button class="link" id="refreshGeo">↻ อัปเดตตำแหน่ง</button>
+      </section>
+
+      <section class="card hidden" id="fieldsCard">
+        <div id="fieldsTitle" class="muted" style="margin-bottom:6px"></div>
+        <div id="fields"></div>
+      </section>
+
+      <section class="actions">
+        <button class="btn in" id="btnIn" disabled>เช็คอิน<small>เข้างาน</small></button>
+        <button class="btn out" id="btnOut" disabled>เช็คเอาท์<small>ออกงาน</small></button>
+      </section>
+
+      <section class="card">
+        <strong>รายการวันนี้</strong>
+        <ul class="timeline" id="timeline"></ul>
+      </section>
+    </div>
+
+    <!-- ===== หน้าใบเบิก ===== -->
+    <div id="viewReq" class="hidden">
+      <section class="card bal">
+        <span>ยอดเบิกค้างเคลียร์</span><b id="reqBalance">0 บาท</b>
+      </section>
+      <section class="card">
+        <label class="f">ประเภท</label>
+        <div class="seg">
+          <button id="kindAdv" data-k="ADV">เบิกก่อนงาน</button>
+          <button id="kindRet" data-k="RET">คืน/เคลียร์หลังงาน</button>
+        </div>
+        <label class="f" for="reqAmount">จำนวนเงิน</label>
+        <div class="unit"><input class="inp" id="reqAmount" inputmode="decimal" placeholder="0.00" autocomplete="off"><span>บาท</span></div>
+        <label class="f" for="reqNote">รายละเอียด</label>
+        <textarea class="inp" id="reqNote" maxlength="500" placeholder="เช่น ค่าน้ำมัน งานส่งของ ลำพูน / ค่าทางด่วน"></textarea>
+        <label class="f">สลิป / ใบเสร็จ <span class="muted" id="slipHint">(ไม่บังคับ)</span></label>
+        <div class="slip">
+          <img id="slipPreview" class="hidden" alt="">
+          <label class="btn out" style="flex:1;text-align:center;padding:12px">📷 ถ่าย / เลือกรูป
+            <input type="file" id="slipFile" accept="image/*" class="hidden">
+          </label>
+        </div>
+        <button class="btn req" id="btnReq" style="margin-top:14px">ส่งใบเบิก</button>
+      </section>
+      <section class="card">
+        <strong>รายการล่าสุด</strong>
+        <ul class="timeline" id="reqList"></ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="overlay" class="overlay hidden">
+  <div class="sheet">
+    <div class="icon" id="resIcon"></div>
+    <h2 id="resTitle"></h2>
+    <div class="muted" id="resSub"></div>
+    <div class="extra" id="resExtra"></div>
+    <ul id="resProblems"></ul>
+    <button class="btn in" id="resClose">ตกลง</button>
+  </div>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ====== ตั้งค่า (แก้ 2 บรรทัดนี้ให้ตรงกับ OA นี้) ====== */
+const LIFF_ID = 'YOUR_LIFF_ID';         // LIFF ID ของ MINI App ของ OA นี้
+const API_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';         // URL Web App ของ Apps Script ของ OA นี้ (ลงท้าย /exec)
+/* ===================================================== */
+const MAX_ACCURACY_M = 100;
+const MAX_FIX_AGE_MS = 30000;
+
+const $ = (id) => document.getElementById(id);
+let state = null, pos = null, map, userMarker, accCircle, busy = false;
+let preferred = null;   // จาก rich menu: ?action=in | out | req
+let reqKind = null, slip = null;
+
+async function main() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+  } catch (e) {
+    return block('เปิดแอปไม่สำเร็จ', 'LIFF init error: ' + e.message);
+  }
+  preferred = new URLSearchParams(location.search).get('action');
+  tickClock(); setInterval(tickClock, 1000);
+
+  const res = await api('status');
+  if (!res) return;
+  if (res.config && res.config.title) document.title = res.config.title;
+  if (!res.employee.approved) {
+    return block('รอการอนุมัติ', `ลงทะเบียนชื่อ “${res.user.name}” แล้ว กรุณาแจ้งผู้ดูแลระบบให้อนุมัติ จากนั้นเปิดหน้านี้อีกครั้ง`);
+  }
+  state = res;
+  $('loading').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  renderProfile(); renderStatus(); initMap(); startGeo();
+
+  $('btnIn').onclick = () => submit('checkin');
+  $('btnOut').onclick = () => submit('checkout');
+  $('refreshGeo').onclick = () => startGeo(true);
+  $('resClose').onclick = onCloseResult;
+
+  if (state.config.requisition) {
+    $('tabs').classList.remove('hidden');
+    $('tabReq').onclick = () => showView('req');
+    $('tabCheck').onclick = () => showView('check');
+    $('kindAdv').onclick = $('kindRet').onclick = (e) => setKind(e.currentTarget.dataset.k);
+    $('slipFile').onchange = onSlip;
+    $('btnReq').onclick = submitReq;
+    renderReq();
+    if (preferred === 'req') showView('req');
+  }
+}
+
+/* ---------- API ---------- */
+async function api(action, data = {}) {
+  try {
+    const r = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, idToken: liff.getIDToken(), ...data }),
+    });
+    const res = await r.json();
+    if (!res.ok) {
+      if (res.code === 'TOKEN_INVALID' && !liff.isInClient()) { liff.logout(); liff.login({ redirectUri: location.href }); return null; }
+      if (action === 'status') block('ใช้งานไม่ได้', res.message); else showError(res.message);
+      return null;
+    }
+    return res;
+  } catch (e) {
+    if (action === 'status') block('เชื่อมต่อไม่สำเร็จ', 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่');
+    else showError('เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่');
+    return null;
+  }
+}
+
+/* ---------- Render ---------- */
+function renderProfile() {
+  if (state.user.picture) $('avatar').src = state.user.picture; else $('avatar').classList.add('hidden');
+  $('empName').textContent = state.employee.fullName || state.user.name;
+  $('empCode').textContent = state.employee.code ? 'รหัส ' + state.employee.code : '';
+}
+
+function renderStatus() {
+  const open = state.openCheckIn;
+  $('statusDot').classList.toggle('on', !!open);
+  $('statusText').textContent = open ? 'กำลังทำงาน' : 'ยังไม่ได้เช็คอิน';
+  $('statusSub').textContent = open
+    ? `เช็คอิน ${open.date} ${open.time} น. · ${open.site}` + (open.note ? ` · ${open.note}` : '')
+    : 'กดเช็คอินเมื่อถึงสถานที่ทำงาน';
+
+  const tl = $('timeline');
+  tl.innerHTML = '';
+  if (!state.today.length) tl.innerHTML = '<li class="muted">ยังไม่มีรายการ</li>';
+  state.today.forEach((r) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="tm"></span><span></span>';
+    li.children[0].textContent = r.time;
+    li.children[1].textContent = `${r.type === 'IN' ? 'เช็คอิน' : 'เช็คเอาท์'} · ${r.site} (${r.distance} ม.)` + (r.note ? ` · ${r.note}` : '');
+    tl.appendChild(li);
+  });
+  renderFields();
+  updateButtons();
+}
+
+/** ช่องกรอกข้อมูลเพิ่มเติม สำหรับปุ่มถัดไป (เช็คอิน หรือ เช็คเอาท์) */
+function renderFields() {
+  const next = state.openCheckIn ? 'OUT' : 'IN';
+  const list = (state.config.fields && state.config.fields[next]) || [];
+  const box = $('fields');
+  box.innerHTML = '';
+  $('fieldsCard').classList.toggle('hidden', !list.length);
+  $('fieldsTitle').textContent = list.length ? `กรอกก่อนกด${next === 'IN' ? 'เช็คอิน' : 'เช็คเอาท์'}` : '';
+  list.forEach((f) => {
+    const lab = document.createElement('label');
+    lab.className = 'f'; lab.htmlFor = 'f_' + f.key; lab.textContent = f.label;
+    const inp = document.createElement('input');
+    inp.className = 'inp'; inp.id = 'f_' + f.key; inp.autocomplete = 'off';
+    inp.placeholder = f.placeholder || '';
+    if (f.type === 'int') { inp.inputMode = 'numeric'; inp.pattern = '[0-9]*'; }
+    if (f.type === 'plate' && state.config.vehicles.length) {
+      const dl = document.createElement('datalist'); dl.id = 'dl_' + f.key;
+      state.config.vehicles.forEach((v) => { const o = document.createElement('option'); o.value = v; dl.appendChild(o); });
+      box.appendChild(dl); inp.setAttribute('list', dl.id);
+      inp.placeholder = 'แตะเพื่อเลือกทะเบียน';
+    }
+    inp.oninput = updateButtons;
+    box.appendChild(lab);
+    if (f.unit) {
+      const wrap = document.createElement('div'); wrap.className = 'unit';
+      const u = document.createElement('span'); u.textContent = f.unit;
+      wrap.append(inp, u); box.appendChild(wrap);
+    } else box.appendChild(inp);
+    if (f.key === 'odometer' && next === 'OUT' && state.openCheckIn.odometer != null) {
+      const h = document.createElement('div'); h.className = 'muted';
+      h.textContent = `ตอนเช็คอิน: ${state.openCheckIn.odometer.toLocaleString()}`;
+      box.appendChild(h);
+    }
+  });
+}
+
+function fieldValues() {
+  const next = state.openCheckIn ? 'OUT' : 'IN';
+  const list = (state.config.fields && state.config.fields[next]) || [];
+  const out = {};
+  let ok = true;
+  list.forEach((f) => {
+    const v = ($('f_' + f.key) || {}).value || '';
+    out[f.key] = v.trim();
+    if (!out[f.key]) ok = false;
+  });
+  return { values: out, complete: ok };
+}
+
+function updateButtons() {
+  if (!state) return;
+  const open = !!state.openCheckIn;
+  const ready = !!pos && !busy && fieldValues().complete;
+  $('btnIn').disabled = !ready || open;
+  $('btnOut').disabled = !ready || !open;
+  $('btnIn').classList.toggle('primary', preferred === 'in' && !open);
+  $('btnOut').classList.toggle('primary', preferred === 'out' && open);
+}
+
+function tickClock() {
+  const now = new Date();
+  $('clock').textContent = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  $('today').textContent = now.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+/* ---------- Map & GPS ---------- */
+function initMap() {
+  const s0 = state.sites[0];
+  map = L.map('map', { zoomControl: false, attributionControl: true }).setView(s0 ? [s0.lat, s0.lng] : [13.7563, 100.5018], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  state.sites.forEach((s) => {
+    L.circle([s.lat, s.lng], { radius: s.radius, color: '#06C755', weight: 2, fillOpacity: 0.12 }).addTo(map).bindTooltip(s.name);
+  });
+}
+
+let watchId = null;
+function startGeo(force) {
+  if (!navigator.geolocation) return geoError({ code: 0 });
+  if (watchId !== null) { if (!force) return; navigator.geolocation.clearWatch(watchId); }
+  setBadge('wait', 'กำลังหาตำแหน่ง…');
+  watchId = navigator.geolocation.watchPosition(onPosition, geoError, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+}
+
+function onPosition(p) {
+  pos = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, time: p.timestamp || Date.now() };
+  const ll = [pos.lat, pos.lng];
+  if (!userMarker) {
+    accCircle = L.circle(ll, { radius: pos.accuracy, color: '#3b82f6', weight: 1, fillOpacity: 0.1 }).addTo(map);
+    userMarker = L.circleMarker(ll, { radius: 7, color: '#fff', weight: 2, fillColor: '#3b82f6', fillOpacity: 1 }).addTo(map);
+  } else { userMarker.setLatLng(ll); accCircle.setLatLng(ll).setRadius(pos.accuracy); }
+
+  const near = nearestSite();
+  map.invalidateSize();
+  if (near) map.fitBounds(L.latLngBounds([ll, [near.lat, near.lng]]).pad(0.4), { maxZoom: 17 });
+  else map.setView(ll, 17);
+
+  const acc = Math.round(pos.accuracy);
+  if (!near) setBadge('bad', 'ไม่มีสถานที่ทำงาน');
+  else if (pos.accuracy > MAX_ACCURACY_M) setBadge('bad', 'GPS ไม่แม่นยำ');
+  else if (near.distance <= near.radius) setBadge('ok', 'อยู่ในพื้นที่');
+  else setBadge('bad', 'อยู่นอกพื้นที่');
+  $('geoDetail').textContent = near
+    ? `ห่างจาก ${near.name} ${fmtDist(near.distance)} (รัศมี ${near.radius} ม.) · ความแม่นยำ ±${acc} ม.`
+    : `ความแม่นยำ ±${acc} ม.`;
+  updateButtons();
+}
+
+function geoError(err) {
+  const msg = {
+    1: 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง — เปิดสิทธิ์ Location ให้แอป LINE ในการตั้งค่าโทรศัพท์ แล้วลองใหม่',
+    2: 'หาตำแหน่งไม่ได้ — ตรวจสอบว่าเปิด GPS แล้ว',
+    3: 'หาตำแหน่งนานเกินไป — ลองออกไปที่โล่งแล้วกดอัปเดตตำแหน่ง',
+  }[err.code] || 'อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง';
+  if (!pos) { setBadge('bad', 'ไม่พบตำแหน่ง'); $('geoDetail').textContent = msg; }
+  updateButtons();
+}
+
+function nearestSite() {
+  if (!pos) return null;
+  return state.sites
+    .map((s) => ({ ...s, distance: haversine(pos.lat, pos.lng, s.lat, s.lng) }))
+    .sort((a, b) => a.distance - b.distance)[0] || null;
+}
+
+function freshPosition() {
+  if (pos && Date.now() - pos.time < MAX_FIX_AGE_MS) return Promise.resolve(pos);
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition((p) => { onPosition(p); resolve(pos); }, reject,
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  });
+}
+
+/* ---------- Submit เช็คอิน/เอาท์ ---------- */
+async function submit(action) {
+  if (busy) return;
+  const fv = fieldValues();
+  if (!fv.complete) return showError('กรุณากรอกข้อมูลให้ครบก่อน');
+  busy = true; updateButtons();
+  const btn = action === 'checkin' ? $('btnIn') : $('btnOut');
+  const label = btn.innerHTML;
+  btn.innerHTML = 'กำลังบันทึก…';
+  try {
+    let p;
+    try { p = await freshPosition(); } catch (e) { geoError(e); showError('ไม่สามารถอ่านตำแหน่งปัจจุบันได้'); return; }
+    const res = await api(action, { lat: p.lat, lng: p.lng, accuracy: p.accuracy, posTime: p.time, fields: fv.values });
+    if (!res) return;
+    showResult(res);
+    const st = await api('status');
+    if (st) { state = { ...state, ...st }; renderStatus(); }
+  } finally {
+    btn.innerHTML = label;
+    busy = false; updateButtons();
+  }
+}
+
+let lastResult = null;
+function showResult(r) {
+  lastResult = r;
+  const what = r.type === 'IN' ? 'เช็คอิน' : 'เช็คเอาท์';
+  $('resIcon').className = 'icon ' + (r.passed ? 'ok' : 'bad');
+  $('resIcon').textContent = r.passed ? '✓' : '✕';
+  $('resTitle').textContent = r.passed ? `${what}สำเร็จ` : `${what}ไม่สำเร็จ`;
+  $('resSub').textContent = r.passed
+    ? `${r.time} น. · ${r.site} (ห่าง ${r.distance} ม.)` + (r.hours !== '' ? ` · ทำงาน ${fmtHours(r.hours)}` : '')
+    : 'ระบบบันทึกความพยายามครั้งนี้ไว้แล้ว';
+  $('resExtra').textContent = (r.extraLines || []).join('\n');
+  const ul = $('resProblems'); ul.innerHTML = '';
+  (r.problems || []).forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+  $('resClose').textContent = r.passed && liff.isInClient() ? 'ตกลงและปิด' : 'ตกลง';
+  $('overlay').classList.remove('hidden');
+}
+
+function showError(message) {
+  lastResult = null;
+  $('resIcon').className = 'icon bad'; $('resIcon').textContent = '!';
+  $('resTitle').textContent = 'ทำรายการไม่ได้';
+  $('resSub').textContent = message;
+  $('resExtra').textContent = '';
+  $('resProblems').innerHTML = '';
+  $('resClose').textContent = 'ตกลง';
+  $('overlay').classList.remove('hidden');
+}
+
+async function onCloseResult() {
+  $('overlay').classList.add('hidden');
+  const r = lastResult;
+  if (!r || !r.passed || !liff.isInClient()) return;
+  let text;
+  if (r.reqId) {
+    text = `🧾 ส่ง${r.kind} ${r.amount.toLocaleString()} บาท\nเลขที่ ${r.reqId} · รออนุมัติ`;
+  } else {
+    const what = r.type === 'IN' ? '✅ เช็คอิน' : '🏁 เช็คเอาท์';
+    text = `${what} ${r.date} ${r.time} น.\n📍 ${r.site} (ห่าง ${r.distance} ม. ±${r.accuracy} ม.)`
+      + (r.hours !== '' ? `\n⏱ ทำงาน ${fmtHours(r.hours)}` : '')
+      + ((r.extraLines || []).length ? '\n' + r.extraLines.join('\n') : '');
+  }
+  try { await liff.sendMessages([{ type: 'text', text }]); } catch (e) { /* ไม่มีสิทธิ์ส่งข้อความ ไม่เป็นไร */ }
+  liff.closeWindow();
+}
+
+/* ---------- ใบเบิก ---------- */
+function showView(v) {
+  $('viewReq').classList.toggle('hidden', v !== 'req');
+  $('viewCheck').classList.toggle('hidden', v === 'req');
+  $('tabReq').classList.toggle('on', v === 'req');
+  $('tabCheck').classList.toggle('on', v !== 'req');
+  if (v !== 'req' && map) setTimeout(() => map.invalidateSize(), 50);
+}
+
+function setKind(k) {
+  reqKind = k;
+  $('kindAdv').classList.toggle('on', k === 'ADV');
+  $('kindRet').classList.toggle('on', k === 'RET');
+  $('slipHint').textContent = k === 'RET' ? '(บังคับ)' : '(ไม่บังคับ)';
+}
+
+function renderReq() {
+  $('reqBalance').textContent = (state.reqBalance || 0).toLocaleString() + ' บาท';
+  const ul = $('reqList'); ul.innerHTML = '';
+  const list = state.requisitions || [];
+  if (!list.length) ul.innerHTML = '<li class="muted">ยังไม่มีรายการ</li>';
+  list.forEach((q) => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="tm"></span><span></span><span class="pill"></span>';
+    li.children[0].textContent = q.date.split(' ')[0];
+    li.children[1].textContent = `${q.kind} ${q.amount.toLocaleString()} ฿ · ${q.note}`;
+    li.children[2].textContent = q.status;
+    li.children[2].classList.add(q.status === 'อนุมัติ' ? 'o' : q.status === 'ไม่อนุมัติ' ? 'n' : 'w');
+    ul.appendChild(li);
+  });
+}
+
+/** ย่อรูปให้ด้านยาวไม่เกิน 1600px แล้วแปลงเป็น JPEG (ไฟล์เล็ก ส่งเร็ว) */
+function onSlip(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const url = c.toDataURL('image/jpeg', 0.8);
+    slip = url.split(',')[1];
+    $('slipPreview').src = url; $('slipPreview').classList.remove('hidden');
+    URL.revokeObjectURL(img.src);
+  };
+  img.onerror = () => showError('อ่านรูปไม่ได้ กรุณาเลือกรูปอื่น');
+  img.src = URL.createObjectURL(file);
+}
+
+async function submitReq() {
+  if (busy) return;
+  const amount = $('reqAmount').value.replace(/[,\s]/g, '');
+  const note = $('reqNote').value.trim();
+  if (!reqKind) return showError('กรุณาเลือกประเภท');
+  if (!(Number(amount) > 0)) return showError('กรุณากรอกจำนวนเงิน');
+  if (!note) return showError('กรุณากรอกรายละเอียด');
+  if (reqKind === 'RET' && !slip) return showError('การคืน/เคลียร์เงิน ต้องแนบสลิปหรือใบเสร็จ');
+  busy = true;
+  const btn = $('btnReq'); btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+  try {
+    const res = await api('reqSubmit', { kind: reqKind, amount, note, slip, slipType: slip ? 'image/jpeg' : '' });
+    if (!res) return;
+    state.reqBalance = res.reqBalance; state.requisitions = res.requisitions; renderReq();
+    $('reqAmount').value = ''; $('reqNote').value = ''; slip = null; $('slipFile').value = '';
+    $('slipPreview').classList.add('hidden');
+    lastResult = { passed: true, reqId: res.id, kind: res.kind, amount: res.amount };
+    $('resIcon').className = 'icon ok'; $('resIcon').textContent = '✓';
+    $('resTitle').textContent = 'ส่งใบเบิกแล้ว';
+    $('resSub').textContent = `${res.kind} ${res.amount.toLocaleString()} บาท · เลขที่ ${res.id}`;
+    $('resExtra').textContent = 'รอแอดมินอนุมัติ ระบบจะแจ้งผลในแชทนี้';
+    $('resProblems').innerHTML = '';
+    $('resClose').textContent = liff.isInClient() ? 'ตกลงและปิด' : 'ตกลง';
+    $('overlay').classList.remove('hidden');
+  } finally {
+    busy = false; btn.disabled = false; btn.textContent = 'ส่งใบเบิก';
+  }
+}
+
+/* ---------- Utils ---------- */
+function block(title, msg) {
+  $('loading').classList.add('hidden'); $('app').classList.add('hidden');
+  $('blocked').classList.remove('hidden');
+  $('blockedTitle').textContent = title; $('blockedMsg').textContent = msg;
+}
+function setBadge(kind, text) { const b = $('geoBadge'); b.className = 'badge ' + kind; b.textContent = text; }
+function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + ' กม.' : Math.round(m) + ' ม.'; }
+function fmtHours(h) { const m = Math.round(h * 60); return `${Math.floor(m / 60)} ชม. ${m % 60} นาที`; }
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, rad = Math.PI / 180;
+  const a = Math.sin((lat2 - lat1) * rad / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin((lng2 - lng1) * rad / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+main();
+</script>
+</body>
+</html>
